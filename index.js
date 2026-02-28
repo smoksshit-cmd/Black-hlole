@@ -514,11 +514,16 @@ function makeDraggable(w) {
     if (!drag) return; drag = false;
     w.style.transition = 'box-shadow .25s,transform .25s,border-color .25s';
     if (moved) { cfg().widgetPos = { top: w.style.top, left: w.style.left }; saveSettingsDebounced(); }
-    else if (Date.now() - startTime < 300) toggleShop();
+    else if (Date.now() - startTime < 300) {
+      // Открываем меню в следующем тике, чтобы клик после pointerup не попал в оверлей и не закрыл его сразу
+      setTimeout(() => toggleShop(), 0);
+    }
   };
   w.addEventListener('pointerdown', onDown);
   w.addEventListener('pointermove', onMove);
   w.addEventListener('pointerup', onUp);
+  // Гасим синтетический click после pointer-событий (особенно на мобильных)
+  w.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); }, { capture: true });
 }
 
 function updateBadge() {
