@@ -204,7 +204,9 @@ function injectCSS() {
   z-index: 99999; display: flex; flex-direction: column;
   align-items: flex-end; gap: 10px;
   touch-action: none; user-select: none;
+  pointer-events: none;
 }
+#bm-btn, #bm-panel { pointer-events: auto; }
 
 /* Кнопка-тогл */
 #bm-btn {
