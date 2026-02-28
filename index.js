@@ -543,20 +543,44 @@ let shopState = { view: 'main', catId: null, tab: 'shop' }; // main | category |
 // и тут же закрыть меню. Поэтому игнорируем фоновые клики короткое окно времени.
 let lastShopOpenAt = 0;
 
+// На мобильных часто после pointer/touch прилетает «догоняющий» click.
+// Он может закрыть оверлей (или триггернуть глобальные обработчики ST) сразу после открытия.
+// Мы «проглатываем» следующий click в capture-фазе, ровно один раз.
+let toggleLockUntil = 0;
+
+function swallowNextClickOnce() {
+  const h = (e) => {
+    // Только один раз
+    document.removeEventListener('click', h, true);
+    e.preventDefault();
+    e.stopPropagation();
+  };
+  document.addEventListener('click', h, true);
+}
+
+
 function createOverlay() {
   if (document.getElementById('bm-overlay')) return;
   const o = document.createElement('div');
   o.id = 'bm-overlay';
   o.innerHTML = '<div id="bm-shop"></div>';
   document.body.appendChild(o);
-  o.addEventListener('click', (e) => {
+  // Закрытие по тапу на фоне (но не сразу после открытия)
+  const onBg = (e) => {
     // Защита от «мгновенного закрытия» после открытия по tap
-    if (Date.now() - lastShopOpenAt < 350) return;
+    if (Date.now() - lastShopOpenAt < 900) return;
     if (e.target === o) closeShop();
-  });
+  };
+  o.addEventListener('pointerdown', onBg);
+  o.addEventListener('click', onBg);
 }
 
 function toggleShop() {
+  const now = Date.now();
+  // Защита от двойного срабатывания (pointerup + click/другие хендлеры)
+  if (now < toggleLockUntil) return;
+  toggleLockUntil = now + 450;
+
   createOverlay();
   const o = document.getElementById('bm-overlay');
   if (o.classList.contains('bm-open')) closeShop();
@@ -564,6 +588,7 @@ function toggleShop() {
     shopState = { view: 'main', catId: null, tab: 'shop' };
     renderShop();
     lastShopOpenAt = Date.now();
+    swallowNextClickOnce();
     o.classList.add('bm-open');
   }
 }
