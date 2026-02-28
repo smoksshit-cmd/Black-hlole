@@ -230,20 +230,22 @@ function injectStyles() {
 }
 #bm-widget:hover { box-shadow:0 6px 30px rgba(139,92,246,.55); border-color:rgba(139,92,246,.8); }
 #bm-widget:active { cursor:grabbing; transform:scale(.93); }
-#bm-widget .bm-icon { font-size:24px; pointer-events:none; line-height:1; }
-#bm-widget .bm-open-btn{
-  position:absolute; left:50%; bottom:-6px; transform:translateX(-50%);
-  width:26px; height:26px; border-radius:13px;
-  background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.12);
-  color:#e2e8f0; font-size:14px; font-weight:800;
+#bm-open-btn {
+  position:absolute; top:6px; left:6px;
+  width:22px; height:22px;
+  border:none; border-radius:6px;
+  background:rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.10);
+  color:rgba(226,232,240,.9);
+  font-size:14px; font-weight:900; line-height:1;
+  cursor:pointer;
   display:flex; align-items:center; justify-content:center;
-  cursor:pointer; padding:0; line-height:1;
-  transition:background .15s,transform .1s;
   -webkit-tap-highlight-color:transparent;
 }
-#bm-widget .bm-open-btn:hover { background:rgba(255,255,255,.14); }
-#bm-widget .bm-open-btn:active { transform:translateX(-50%) scale(.92); }
-
+#bm-open-btn:hover { background:rgba(255,255,255,.12); }
+#bm-open-btn:active { transform:scale(.98); }
+#bm-open-btn:focus { outline:none; }
+#bm-widget .bm-icon { font-size:24px; pointer-events:none; line-height:1; }
 #bm-widget .bm-badge {
   position:absolute; top:-4px; right:-4px; min-width:18px; height:18px;
   background:#ef4444; color:#fff; font-size:10px; font-weight:700;
@@ -481,21 +483,13 @@ function createWidget() {
   const c = cfg();
   const w = document.createElement('div');
   w.id = 'bm-widget';
-  w.innerHTML = '<span class="bm-icon">🏴‍☠️</span><span class="bm-badge" id="bm-inv-badge" style="display:none;">0</span>'
-    + '<button type="button" class="bm-open-btn" id="bm-open-btn" title="Открыть меню">☰</button>';
+  // Меню открываем ТОЛЬКО кнопкой внутри виджета (а сам виджет — только перетаскивание).
+  w.innerHTML = ''
+    + '<button id="bm-open-btn" type="button" aria-label="Открыть чёрный рынок" title="Открыть">☰</button>'
+    + '<span class="bm-icon">🏴‍☠️</span>'
+    + '<span class="bm-badge" id="bm-inv-badge" style="display:none;">0</span>';
   w.style.display = (c.widgetVisible && c.isEnabled) ? 'flex' : 'none';
   document.body.appendChild(w);
-
-  // Открываем меню только по кнопке (без "тапа по всему виджету"),
-  // чтобы исключить мгновенное закрытие из-за догоняющих событий на мобильных.
-  const openBtn = w.querySelector('#bm-open-btn');
-  if (openBtn) {
-    openBtn.addEventListener('pointerup', (e) => { e.preventDefault(); e.stopPropagation(); toggleShop(); });
-    openBtn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); });
-    openBtn.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleShop(); }
-    });
-  }
 
   const sz = c.widgetSize || 52;
   w.style.width = sz + 'px'; w.style.height = sz + 'px';
@@ -508,12 +502,26 @@ function createWidget() {
   window.addEventListener('resize', () => clampWidgetToViewport(w));
   makeDraggable(w);
   updateBadge();
+
+  // Привязка открытия/закрытия меню к кнопке
+  const btn = w.querySelector('#bm-open-btn');
+  if (btn) {
+    const onBtn = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleShop();
+    };
+    // Не даём событию уйти в drag-хендлеры/фон
+    btn.addEventListener('pointerdown', (e) => { e.stopPropagation(); }, { passive: true });
+    btn.addEventListener('click', onBtn);
+  }
 }
 
 function makeDraggable(w) {
   let drag = false, moved = false, gX = 0, gY = 0, startTime = 0;
   const onDown = (e) => {
-    if (e?.target?.closest?.('.bm-open-btn')) return;
+    // Если нажали по кнопке открытия — не начинаем drag (пусть отработает click)
+    if (e.target && (e.target.id === 'bm-open-btn' || e.target.closest?.('#bm-open-btn'))) return;
     const t = e.touches ? e.touches[0] : e;
     const r = w.getBoundingClientRect();
     gX = t.clientX - r.left; gY = t.clientY - r.top;
@@ -540,6 +548,7 @@ function makeDraggable(w) {
     if (!drag) return; drag = false;
     w.style.transition = 'box-shadow .25s,transform .25s,border-color .25s';
     if (moved) { cfg().widgetPos = { top: w.style.top, left: w.style.left }; saveSettingsDebounced(); }
+    // Больше не открываем меню тапом по виджету — только кнопкой.
   };
   w.addEventListener('pointerdown', onDown);
   w.addEventListener('pointermove', onMove);
