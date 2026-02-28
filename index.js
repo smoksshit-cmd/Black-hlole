@@ -549,16 +549,19 @@ let lastShopOpenAt = 0;
 let toggleLockUntil = 0;
 
 function swallowNextClickOnce() {
+  // На iOS/Android после pointer/touch может прилететь цепочка событий:
+  // pointerdown/up -> (compat) mousedown/up -> click.
+  // Нам важно «проглотить» ровно ОДНО следующее взаимодействие,
+  // чтобы оно не попало в фон оверлея и не закрыло меню.
+  const types = ['click', 'pointerdown', 'mousedown', 'touchstart'];
   const h = (e) => {
-    // Только один раз
-    document.removeEventListener('click', h, true);
-    e.preventDefault();
-    e.stopPropagation();
+    types.forEach(t => document.removeEventListener(t, h, true));
+    try { e.preventDefault(); } catch {}
+    try { e.stopPropagation(); } catch {}
+    try { e.stopImmediatePropagation?.(); } catch {}
   };
-  document.addEventListener('click', h, true);
+  types.forEach(t => document.addEventListener(t, h, true));
 }
-
-
 function createOverlay() {
   if (document.getElementById('bm-overlay')) return;
   const o = document.createElement('div');
