@@ -594,19 +594,15 @@ function swallowNextClickOnce() {
 
 
 function createOverlay() {
-  if (document.getElementById('bm-overlay')) return;
-  const o = document.createElement('div');
-  o.id = 'bm-overlay';
-  o.innerHTML = '<div id="bm-shop"></div>';
-  document.body.appendChild(o);
-  // Закрытие по тапу на фоне (но не сразу после открытия)
-  const onBg = (e) => {
-    // Защита от «мгновенного закрытия» после открытия по tap
-    if (Date.now() - lastShopOpenAt < 900) return;
-    if (e.target === o) closeShop();
-  };
-  o.addEventListener('pointerdown', onBg);
-  o.addEventListener('click', onBg);
+  if (document.getElementById('bm-overlay')) return;
+  const o = document.createElement('div');
+  o.id = 'bm-overlay';
+  o.innerHTML = '<div id="bm-shop"></div>';
+  document.body.appendChild(o);
+  // ЗАКРЫТИЕ ТОЛЬКО ПО КНОПКЕ ✕ — убрали фон
+  // const onBg = (e) => { ... }; ← удалить или закомментировать
+  // o.addEventListener('pointerdown', onBg);
+  // o.addEventListener('click', onBg);
 }
 
 function toggleShop() {
