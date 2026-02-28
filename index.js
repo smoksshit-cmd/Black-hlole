@@ -158,18 +158,6 @@ const defaultSettings = {
 
 const cfg = () => extension_settings[EXT_NAME];
 
-// Fallback clone for older browsers / WebView (structuredClone may be missing)
-function deepClone(obj) {
-  try {
-    // structuredClone exists in modern browsers
-    return structuredClone(obj);
-  } catch (e) {
-    // JSON clone is enough for our plain data objects
-    return JSON.parse(JSON.stringify(obj));
-  }
-}
-
-
 function toast(type, msg) {
   try { if (typeof toastr !== 'undefined') toastr[type]?.(msg, 'Black Market', { timeOut: 2500, positionClass: 'toast-top-center' }); } catch {}
 }
@@ -230,8 +218,8 @@ function injectStyles() {
   el.textContent = `
 /* === Floating Widget === */
 #bm-widget {
-  position:fixed; bottom:calc(90px + env(safe-area-inset-bottom, 0px)); right:calc(16px + env(safe-area-inset-right, 0px)); top:auto; left:auto;
-  width:52px; height:52px; cursor:grab; z-index:2147483646;
+  position:fixed; bottom:90px; right:16px; top:auto; left:auto;
+  width:52px; height:52px; cursor:grab; z-index:999998;
   user-select:none; touch-action:none;
   border-radius:50%; display:flex; align-items:center; justify-content:center;
   background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);
@@ -254,7 +242,7 @@ function injectStyles() {
 
 /* === Shop Overlay === */
 #bm-overlay {
-  position:fixed; inset:0; z-index:2147483647;
+  position:fixed; inset:0; z-index:999999;
   background:rgba(0,0,0,.6); backdrop-filter:blur(4px);
   display:flex; align-items:flex-end; justify-content:center;
   opacity:0; pointer-events:none;
@@ -422,7 +410,7 @@ function injectStyles() {
   .bm-cat-grid { grid-template-columns:repeat(2,1fr); gap:8px; }
   .bm-header { padding:12px 12px 10px; }
   .bm-content { padding:8px 10px 14px; }
-  #bm-widget { bottom:calc(80px + env(safe-area-inset-bottom, 0px)); right:calc(10px + env(safe-area-inset-right, 0px)); }
+  #bm-widget { bottom:80px; right:10px; }
 }
 @media(max-width:360px) {
   .bm-cat-grid { grid-template-columns:repeat(2,1fr); gap:6px; }
@@ -430,17 +418,50 @@ function injectStyles() {
   .bm-cat-icon { font-size:24px; }
 }
 `;
-  // Fix common locale mistake: rgba(...,06) / rgba(...,5) (alpha without dot)
-  el.textContent = el.textContent.replace(/rgba\((\d+),(\d+),(\d+),([0-9]{1,2})\)/g, (m,r,g,b,a) => {
-    if (a === '0' || a === '1') return `rgba(${r},${g},${b},${a})`;
-    return `rgba(${r},${g},${b},.${a})`;
-  });
   document.head.appendChild(el);
 }
 
 /* ═══════════════════════════════════════════
    ВИДЖЕТ (Плавающая кнопка)
    ═══════════════════════════════════════════ */
+
+function clampWidgetToViewport(w) {
+  if (!w) return;
+  const rect = w.getBoundingClientRect();
+  let left = rect.left;
+  let top = rect.top;
+
+  // If positioned via bottom/right, convert to left/top once so we can clamp
+  const computed = window.getComputedStyle(w);
+  const hasLeft = computed.left !== 'auto';
+  const hasTop = computed.top !== 'auto';
+
+  if (!hasLeft || !hasTop) {
+    left = rect.left;
+    top = rect.top;
+    w.style.left = left + 'px';
+    w.style.top = top + 'px';
+    w.style.right = 'auto';
+    w.style.bottom = 'auto';
+  }
+
+  const maxL = Math.max(4, window.innerWidth - w.offsetWidth - 4);
+  const maxT = Math.max(4, window.innerHeight - w.offsetHeight - 4);
+  const newL = Math.max(4, Math.min(maxL, left));
+  const newT = Math.max(4, Math.min(maxT, top));
+
+  w.style.left = newL + 'px';
+  w.style.top = newT + 'px';
+  w.style.right = 'auto';
+  w.style.bottom = 'auto';
+
+  // Persist if something was off-screen
+  if (Math.abs(newL - left) > 0.5 || Math.abs(newT - top) > 0.5) {
+    cfg().widgetPos = { top: w.style.top, left: w.style.left };
+    saveSettingsDebounced();
+  }
+}
+
 function createWidget() {
   if (document.getElementById('bm-widget')) return;
   injectStyles();
@@ -450,9 +471,6 @@ function createWidget() {
   w.innerHTML = '<span class="bm-icon">🏴‍☠️</span><span class="bm-badge" id="bm-inv-badge" style="display:none;">0</span>';
   w.style.display = (c.widgetVisible && c.isEnabled) ? 'flex' : 'none';
   document.body.appendChild(w);
-  // Extra safety: keep above chat UI and avoid transformed ancestors quirks
-  w.style.zIndex = '2147483646';
-  w.style.transform = 'none';
 
   const sz = c.widgetSize || 52;
   w.style.width = sz + 'px'; w.style.height = sz + 'px';
@@ -461,6 +479,8 @@ function createWidget() {
     w.style.top = c.widgetPos.top; w.style.bottom = 'auto';
     w.style.left = c.widgetPos.left; w.style.right = 'auto';
   }
+  clampWidgetToViewport(w);
+  window.addEventListener('resize', () => clampWidgetToViewport(w));
   makeDraggable(w);
   updateBadge();
 }
@@ -499,12 +519,6 @@ function makeDraggable(w) {
   w.addEventListener('pointerdown', onDown);
   w.addEventListener('pointermove', onMove);
   w.addEventListener('pointerup', onUp);
-  w.addEventListener('pointercancel', onUp);
-  // Touch fallback for browsers without Pointer Events (some mobile WebViews)
-  w.addEventListener('touchstart', onDown, { passive: false });
-  w.addEventListener('touchmove', onMove, { passive: false });
-  w.addEventListener('touchend', onUp);
-  w.addEventListener('touchcancel', onUp);
 }
 
 function updateBadge() {
@@ -982,7 +996,7 @@ function bindSettingsEvents() {
   $(document).on('click.bm-settings', '#bm-reset-pos', () => {
     cfg().widgetPos = null; saveSettingsDebounced();
     const w = document.getElementById('bm-widget');
-    if (w) { w.style.top = 'auto'; w.style.bottom = 'calc(90px + env(safe-area-inset-bottom, 0px))'; w.style.left = 'auto'; w.style.right = 'calc(16px + env(safe-area-inset-right, 0px))'; }
+    if (w) { w.style.top = 'auto'; w.style.bottom = '90px'; w.style.left = 'auto'; w.style.right = '16px'; }
     toast('info', 'Позиция виджета сброшена');
   });
   $(document).on('click.bm-settings', '#bm-reset-addictions', () => {
@@ -995,11 +1009,11 @@ function bindSettingsEvents() {
     toast('info', 'Инвентарь очищен');
   });
   $(document).on('click.bm-settings', '#bm-reset-all', () => {
-    const def = deepClone(defaultSettings);
-    for (const [k, v] of Object.entries(def)) cfg()[k] = deepClone(v);
+    const def = structuredClone(defaultSettings);
+    for (const [k, v] of Object.entries(def)) cfg()[k] = structuredClone(v);
     saveSettingsDebounced(); updatePromptInjection(); updateBadge(); syncSettingsPanel();
     const w = document.getElementById('bm-widget');
-    if (w) { w.style.display = 'flex'; w.style.top = 'auto'; w.style.bottom = 'calc(90px + env(safe-area-inset-bottom, 0px))'; w.style.left = 'auto'; w.style.right = 'calc(16px + env(safe-area-inset-right, 0px))'; w.style.width = '52px'; w.style.height = '52px'; }
+    if (w) { w.style.display = 'flex'; w.style.top = 'auto'; w.style.bottom = '90px'; w.style.left = 'auto'; w.style.right = '16px'; w.style.width = '52px'; w.style.height = '52px'; }
     toast('info', 'Все данные сброшены');
   });
 }
@@ -1009,10 +1023,10 @@ function bindSettingsEvents() {
    ═══════════════════════════════════════════ */
 jQuery(() => {
   try {
-    if (!extension_settings[EXT_NAME]) extension_settings[EXT_NAME] = deepClone(defaultSettings);
+    if (!extension_settings[EXT_NAME]) extension_settings[EXT_NAME] = structuredClone(defaultSettings);
     const c = cfg();
     for (const [k, v] of Object.entries(defaultSettings)) {
-      if (c[k] === undefined) c[k] = deepClone(v);
+      if (c[k] === undefined) c[k] = structuredClone(v);
     }
     if (!Array.isArray(c.inventory))     c.inventory     = [];
     if (!Array.isArray(c.activeEffects)) c.activeEffects = [];
@@ -1026,7 +1040,7 @@ jQuery(() => {
     eventSource.on(event_types.MESSAGE_SENT,     onMessageSent);
     eventSource.on(event_types.MESSAGE_RECEIVED,  onMessageReceived);
     if (event_types.CHAT_CHANGED) {
-      eventSource.on(event_types.CHAT_CHANGED, () => { syncSettingsPanel(); updatePromptInjection(); createWidget(); updateBadge(); });
+      eventSource.on(event_types.CHAT_CHANGED, () => { syncSettingsPanel(); updatePromptInjection(); });
     }
   } catch(e) {
     toast('error', 'Black Market: ошибка инициализации — ' + e.message);
