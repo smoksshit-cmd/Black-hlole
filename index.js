@@ -231,6 +231,19 @@ function injectStyles() {
 #bm-widget:hover { box-shadow:0 6px 30px rgba(139,92,246,.55); border-color:rgba(139,92,246,.8); }
 #bm-widget:active { cursor:grabbing; transform:scale(.93); }
 #bm-widget .bm-icon { font-size:24px; pointer-events:none; line-height:1; }
+#bm-widget .bm-open-btn{
+  position:absolute; left:50%; bottom:-6px; transform:translateX(-50%);
+  width:26px; height:26px; border-radius:13px;
+  background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.12);
+  color:#e2e8f0; font-size:14px; font-weight:800;
+  display:flex; align-items:center; justify-content:center;
+  cursor:pointer; padding:0; line-height:1;
+  transition:background .15s,transform .1s;
+  -webkit-tap-highlight-color:transparent;
+}
+#bm-widget .bm-open-btn:hover { background:rgba(255,255,255,.14); }
+#bm-widget .bm-open-btn:active { transform:translateX(-50%) scale(.92); }
+
 #bm-widget .bm-badge {
   position:absolute; top:-4px; right:-4px; min-width:18px; height:18px;
   background:#ef4444; color:#fff; font-size:10px; font-weight:700;
@@ -468,9 +481,21 @@ function createWidget() {
   const c = cfg();
   const w = document.createElement('div');
   w.id = 'bm-widget';
-  w.innerHTML = '<span class="bm-icon">🏴‍☠️</span><span class="bm-badge" id="bm-inv-badge" style="display:none;">0</span>';
+  w.innerHTML = '<span class="bm-icon">🏴‍☠️</span><span class="bm-badge" id="bm-inv-badge" style="display:none;">0</span>'
+    + '<button type="button" class="bm-open-btn" id="bm-open-btn" title="Открыть меню">☰</button>';
   w.style.display = (c.widgetVisible && c.isEnabled) ? 'flex' : 'none';
   document.body.appendChild(w);
+
+  // Открываем меню только по кнопке (без "тапа по всему виджету"),
+  // чтобы исключить мгновенное закрытие из-за догоняющих событий на мобильных.
+  const openBtn = w.querySelector('#bm-open-btn');
+  if (openBtn) {
+    openBtn.addEventListener('pointerup', (e) => { e.preventDefault(); e.stopPropagation(); toggleShop(); });
+    openBtn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); });
+    openBtn.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleShop(); }
+    });
+  }
 
   const sz = c.widgetSize || 52;
   w.style.width = sz + 'px'; w.style.height = sz + 'px';
@@ -488,6 +513,7 @@ function createWidget() {
 function makeDraggable(w) {
   let drag = false, moved = false, gX = 0, gY = 0, startTime = 0;
   const onDown = (e) => {
+    if (e?.target?.closest?.('.bm-open-btn')) return;
     const t = e.touches ? e.touches[0] : e;
     const r = w.getBoundingClientRect();
     gX = t.clientX - r.left; gY = t.clientY - r.top;
@@ -514,7 +540,6 @@ function makeDraggable(w) {
     if (!drag) return; drag = false;
     w.style.transition = 'box-shadow .25s,transform .25s,border-color .25s';
     if (moved) { cfg().widgetPos = { top: w.style.top, left: w.style.left }; saveSettingsDebounced(); }
-    else if (Date.now() - startTime < 300) toggleShop();
   };
   w.addEventListener('pointerdown', onDown);
   w.addEventListener('pointermove', onMove);
@@ -549,19 +574,16 @@ let lastShopOpenAt = 0;
 let toggleLockUntil = 0;
 
 function swallowNextClickOnce() {
-  // На iOS/Android после pointer/touch может прилететь цепочка событий:
-  // pointerdown/up -> (compat) mousedown/up -> click.
-  // Нам важно «проглотить» ровно ОДНО следующее взаимодействие,
-  // чтобы оно не попало в фон оверлея и не закрыло меню.
-  const types = ['click', 'pointerdown', 'mousedown', 'touchstart'];
   const h = (e) => {
-    types.forEach(t => document.removeEventListener(t, h, true));
-    try { e.preventDefault(); } catch {}
-    try { e.stopPropagation(); } catch {}
-    try { e.stopImmediatePropagation?.(); } catch {}
+    // Только один раз
+    document.removeEventListener('click', h, true);
+    e.preventDefault();
+    e.stopPropagation();
   };
-  types.forEach(t => document.addEventListener(t, h, true));
+  document.addEventListener('click', h, true);
 }
+
+
 function createOverlay() {
   if (document.getElementById('bm-overlay')) return;
   const o = document.createElement('div');
