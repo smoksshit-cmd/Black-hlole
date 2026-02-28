@@ -201,12 +201,12 @@ function injectCSS() {
 /* Враппер — позиционируемый контейнер кнопки+панели */
 #bm-root {
   position: fixed; bottom: 90px; right: 16px;
-  z-index: 99999; display: flex; flex-direction: column;
-  align-items: flex-end; gap: 10px;
+  z-index: 99999;
   touch-action: none; user-select: none;
   pointer-events: none;
 }
-#bm-btn, #bm-panel { pointer-events: auto; }
+#bm-btn { pointer-events: auto; }
+#bm-panel { pointer-events: auto; }
 
 /* Кнопка-тогл */
 #bm-btn {
@@ -238,6 +238,8 @@ function injectCSS() {
 
 /* Панель */
 #bm-panel {
+  position: absolute;
+  bottom: 60px; right: 0;
   width: min(280px, calc(100vw - 20px));
   max-height: min(55vh, 420px);
   background: linear-gradient(160deg,#0d0d1c,#181830);
@@ -246,14 +248,14 @@ function injectCSS() {
   display: none; flex-direction: column; overflow: hidden;
   box-shadow: 0 8px 40px rgba(0,0,0,.65);
   opacity: 0;
-  transform: translateY(8px) scale(.96);
+  transform: translateY(6px) scale(.97);
   transform-origin: bottom right;
   transition: opacity .15s ease, transform .15s ease;
   pointer-events: none;
 }
 #bm-panel.open {
   display: flex;
-  opacity:1; pointer-events:auto;
+  opacity: 1; pointer-events: auto;
   transform: translateY(0) scale(1);
 }
 
