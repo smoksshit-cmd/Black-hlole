@@ -514,16 +514,11 @@ function makeDraggable(w) {
     if (!drag) return; drag = false;
     w.style.transition = 'box-shadow .25s,transform .25s,border-color .25s';
     if (moved) { cfg().widgetPos = { top: w.style.top, left: w.style.left }; saveSettingsDebounced(); }
-    else if (Date.now() - startTime < 300) {
-      // Открываем меню в следующем тике, чтобы клик после pointerup не попал в оверлей и не закрыл его сразу
-      setTimeout(() => toggleShop(), 0);
-    }
+    else if (Date.now() - startTime < 300) toggleShop();
   };
   w.addEventListener('pointerdown', onDown);
   w.addEventListener('pointermove', onMove);
   w.addEventListener('pointerup', onUp);
-  // Гасим синтетический click после pointer-событий (особенно на мобильных)
-  w.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); }, { capture: true });
 }
 
 function updateBadge() {
@@ -543,6 +538,10 @@ function pulseWidget() {
    МАГАЗИН (Popup)
    ═══════════════════════════════════════════ */
 let shopState = { view: 'main', catId: null, tab: 'shop' }; // main | category | inventory | addictions
+// На мобильных после pointer/touch часто прилетает «догоняющий» click.
+// Если мы открываем оверлей на tap по виджету, этот click может попасть в фон-оверлей
+// и тут же закрыть меню. Поэтому игнорируем фоновые клики короткое окно времени.
+let lastShopOpenAt = 0;
 
 function createOverlay() {
   if (document.getElementById('bm-overlay')) return;
@@ -550,14 +549,23 @@ function createOverlay() {
   o.id = 'bm-overlay';
   o.innerHTML = '<div id="bm-shop"></div>';
   document.body.appendChild(o);
-  o.addEventListener('click', (e) => { if (e.target === o) closeShop(); });
+  o.addEventListener('click', (e) => {
+    // Защита от «мгновенного закрытия» после открытия по tap
+    if (Date.now() - lastShopOpenAt < 350) return;
+    if (e.target === o) closeShop();
+  });
 }
 
 function toggleShop() {
   createOverlay();
   const o = document.getElementById('bm-overlay');
   if (o.classList.contains('bm-open')) closeShop();
-  else { shopState = { view: 'main', catId: null, tab: 'shop' }; renderShop(); o.classList.add('bm-open'); }
+  else {
+    shopState = { view: 'main', catId: null, tab: 'shop' };
+    renderShop();
+    lastShopOpenAt = Date.now();
+    o.classList.add('bm-open');
+  }
 }
 
 function closeShop() {
